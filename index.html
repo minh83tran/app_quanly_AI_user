@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Dashboard - Quản Lý Khách Hàng</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar glass-panel">
+            <div class="logo">
+                <i class="ph ph-cube-transparent"></i>
+                <h2>AISHOP</h2>
+            </div>
+            <ul class="nav-links">
+                <li class="active" onclick="switchView('home', this)"><i class="ph ph-house"></i> Tất Cả Khách Hàng</li>
+
+                <!-- Dropdown Dịch Vụ -->
+                <li class="dropdown-toggle" onclick="toggleSubmenu('serviceSubmenu')">
+                    <div style="display:flex; align-items:center; gap: 12px; flex:1;">
+                        <i class="ph ph-squares-four"></i> Dịch Vụ
+                    </div>
+                    <i class="ph ph-caret-down dropdown-icon"></i>
+                </li>
+                <ul class="submenu" id="serviceSubmenu">
+                    <li onclick="filterByService('', this)"><i class="ph ph-list-bullets"></i> Mọi Dịch Vụ</li>
+                    <li onclick="filterByService('ChatGPT Plus', this)"><i class="ph ph-robot"></i> ChatGPT Plus</li>
+                    <li onclick="filterByService('Canva Pro', this)"><i class="ph ph-paint-brush-broad"></i> Canva Pro
+                    </li>
+                    <li onclick="filterByService('Adobe Creative Cloud', this)"><i class="ph ph-swatches"></i> Adobe CC
+                    </li>
+                    <li onclick="filterByService('Netflix Premium', this)"><i class="ph ph-video-camera"></i> Netflix
+                        Premium</li>
+                    <li onclick="filterByService('Midjourney', this)"><i class="ph ph-sailboat"></i> Midjourney</li>
+                    <li onclick="filterByService('Khác', this)"><i class="ph ph-atom"></i> Khác</li>
+                </ul>
+
+                <li onclick="switchView('expiring', this)"
+                    style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap: 12px;">
+                        <i class="ph ph-warning-circle"></i> Sắp Hết Hạn
+                    </div>
+                    <span id="expiringBadge" class="sidebar-badge" style="display:none;">0</span>
+                </li>
+
+                <li onclick="switchView('admins', this)"><i class="ph ph-chalkboard-teacher"></i> Quản Trị Viên</li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-header glass-panel">
+                <div class="search-bar">
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" id="searchInput" placeholder="Tìm kiếm...">
+                </div>
+                <div class="user-profile" style="display:flex; align-items:center; gap:24px;">
+                    <!-- Notification Center -->
+                    <div class="notif-wrapper" style="position: relative;">
+                        <i class="ph ph-bell" id="bellIcon" onclick="toggleNotifDropdown()" style="font-size: 1.5rem; cursor: pointer; color: var(--text-main);" title="Trung tâm Thông Báo"></i>
+                        <span id="bellBadge" class="bell-badge" style="display: none;">0</span>
+                        
+                        <div id="notifDropdown" class="notif-dropdown glass-panel-modal">
+                            <div class="notif-header">
+                                <h3>Thông báo</h3>
+                            </div>
+                            <div class="notif-list" id="notifList">
+                                <!-- list data -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="avatar"><i class="ph ph-user"></i></div>
+                        <span>Hệ Thống</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- VIEW: CUSTOMERS -->
+            <div id="viewCustomers" class="view-section active">
+                <!-- Stats Cards -->
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #6366f1, #818cf8);"><i class="ph ph-users"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statTotal">0</span>
+                            <span class="stat-label">Tổng Khách Hàng</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #f87171);"><i class="ph ph-warning"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statExpiring">0</span>
+                            <span class="stat-label">Sắp Hết Hạn</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #34d399);"><i class="ph ph-check-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statActive">0</span>
+                            <span class="stat-label">Đang Hoạt Động</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #fbbf24);"><i class="ph ph-chalkboard-teacher"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statAdmins">0</span>
+                            <span class="stat-label">Quản Trị Viên</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions-bar">
+                    <h1 class="page-title" id="mainTitle">Danh Sách Khách Hàng</h1>
+                    <button class="btn-primary" id="addBtn"><i class="ph ph-plus"></i> Thêm Khách Hàng</button>
+                </div>
+                <div class="table-container glass-panel">
+                    <table id="customerTable">
+                        <thead>
+                            <tr>
+                                <th>Khách Hàng</th>
+                                <th>Số Điện Thoại</th>
+                                <th>Quản Lý Bằng</th> <!-- Replaced Dịch vụ -> Quản lý (Admin) -->
+                                <th>Tài Khoản (Email)</th>
+                                <th>Mật Khẩu</th>
+                                <th>Bắt Đầu</th>
+                                <th>Hết Hạn</th>
+                                <th>Trạng Thái</th>
+                                <th>Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Data -->
+                        </tbody>
+                    </table>
+                    <div id="emptyState" class="empty-state" style="display: none;">
+                        <i class="ph ph-folder-open"></i>
+                        <p>Không có dữ liệu phù hợp</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: ADMINS -->
+            <div id="viewAdmins" class="view-section">
+                <div class="actions-bar">
+                    <h1 class="page-title">Thông Tin Quản Trị Viên</h1>
+                    <button class="btn-primary" id="addAdminBtn"><i class="ph ph-user-plus"></i> Thêm Quản Trị
+                        Viên</button>
+                </div>
+                <div class="table-container glass-panel">
+                    <table id="adminTable">
+                        <thead>
+                            <tr>
+                                <th>Tên Quản Trị Viên</th>
+                                <th>Email Nhận Thông Báo</th>
+                                <th>Khách Đang Quản Lý</th>
+                                <th>Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminTableBody">
+                            <!-- Admin Data -->
+                        </tbody>
+                    </table>
+                    <div id="emptyAdminState" class="empty-state" style="display: none;">
+                        <i class="ph ph-users"></i>
+                        <p>Chưa có Quản Trị Viên nào</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for Customert -->
+    <div class="modal-overlay" id="customModal">
+        <div class="modal-content glass-panel-modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Thêm Khách Hàng</h3>
+                <i class="ph ph-x" id="closeModal"></i>
+            </div>
+            <form id="customerForm">
+                <input type="hidden" id="custId">
+                <div class="form-group row">
+                    <div class="col">
+                        <label>Tên khách hàng</label>
+                        <input type="text" id="custName" required placeholder="Ví dụ: Nguyễn Văn A">
+                    </div>
+                    <div class="col">
+                        <label>Số điện thoại</label>
+                        <input type="tel" id="custPhone" required placeholder="09xxxxxxxx">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <label>Loại Dịch Vụ</label>
+                        <select id="custService" required>
+                            <option value="ChatGPT Plus">ChatGPT Plus</option>
+                            <option value="Adobe Creative Cloud">Adobe Creative Cloud</option>
+                            <option value="Canva Pro">Canva Pro</option>
+                            <option value="Netflix Premium">Netflix Premium</option>
+                            <option value="Midjourney">Midjourney</option>
+                            <option value="Khác">Khác</option>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <label>Quản Trị Viên Quản Lý</label>
+                        <select id="custAdmin" required>
+                            <!-- Admins inserted here -->
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <label>Email tài khoản</label>
+                        <input type="text" id="custEmail" required placeholder="email@example.com">
+                    </div>
+                    <div class="col">
+                        <label>Mật khẩu</label>
+                        <input type="text" id="custPwd" required placeholder="Nhập mật khẩu">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <label>Ngày bắt đầu</label>
+                        <input type="date" id="custStart" required>
+                    </div>
+                    <div class="col">
+                        <label>Ngày hết hạn</label>
+                        <input type="date" id="custEnd" required>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="cancelBtn">Hủy</button>
+                    <button type="submit" class="btn-primary">Lưu Lại</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Admin -->
+    <div class="modal-overlay" id="adminModal">
+        <div class="modal-content glass-panel-modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="adminModalTitle">Thêm Quản Trị Viên</h3>
+                <i class="ph ph-x" id="closeAdminModal"></i>
+            </div>
+            <form id="adminForm">
+                <input type="hidden" id="adminId">
+                <div class="form-group">
+                    <label>Tên Quản Trị Viên</label>
+                    <input type="text" id="adminName" required placeholder="Ví dụ: Hoàng Minh">
+                </div>
+                <div class="form-group">
+                    <label>Email (Nhận Thông Báo)</label>
+                    <input type="email" id="adminEmail" required placeholder="admin@email.com">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="cancelAdminBtn">Hủy</button>
+                    <button type="submit" class="btn-primary">Lưu Lại</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- App Script (connects to Node.js API) -->
+    <script src="script.js"></script>
+</body>
+
+</html>
