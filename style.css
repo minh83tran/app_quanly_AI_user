@@ -257,7 +257,7 @@ body {
 /* Stats Grid */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     flex-shrink: 0;
 }
@@ -308,8 +308,25 @@ body {
 
 @media (max-width: 1200px) {
     .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);
     }
+}
+
+/* Service color swatch */
+.service-color-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 2px solid var(--glass-border);
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.service-icon-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.4rem;
 }
 
 @media (max-width: 768px) {

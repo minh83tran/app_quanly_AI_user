@@ -3,8 +3,11 @@
 // ======================================
 const initSqlJs = require('sql.js');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+
+const SALT = 'aishop_salt_2026';
 
 const DB_PATH = path.join(__dirname, 'data.db');
 
@@ -50,6 +53,15 @@ async function initDatabase() {
     `);
 
     db.run(`
+        CREATE TABLE IF NOT EXISTS services (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            icon TEXT DEFAULT 'ph-cube',
+            color TEXT DEFAULT '#6366f1'
+        )
+    `);
+
+    db.run(`
         CREATE TABLE IF NOT EXISTS notifications (
             id TEXT PRIMARY KEY,
             custId TEXT DEFAULT '',
@@ -57,6 +69,25 @@ async function initDatabase() {
             body TEXT DEFAULT '',
             time TEXT DEFAULT '',
             isRead INTEGER DEFAULT 0
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            fullName TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            passwordHash TEXT NOT NULL,
+            role TEXT DEFAULT 'user',
+            createdAt TEXT DEFAULT ''
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            createdAt TEXT DEFAULT ''
         )
     `);
 
@@ -199,6 +230,43 @@ function deleteAdmin(id) {
 }
 
 // ======================================
+// SERVICES
+// ======================================
+function getAllServices() {
+    return queryAll('SELECT * FROM services');
+}
+
+function addService(data) {
+    const id = uuidv4();
+    execute('INSERT INTO services (id, name, icon, color) VALUES (?, ?, ?, ?)',
+        [id, data.name || '', data.icon || 'ph-cube', data.color || '#6366f1']);
+    return id;
+}
+
+function updateService(id, data) {
+    const existing = queryOne('SELECT * FROM services WHERE id = ?', [id]);
+    if (!existing) return false;
+
+    const fields = [];
+    const values = [];
+    if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+    if (data.icon !== undefined) { fields.push('icon = ?'); values.push(data.icon); }
+    if (data.color !== undefined) { fields.push('color = ?'); values.push(data.color); }
+    if (fields.length === 0) return true;
+
+    values.push(id);
+    execute(`UPDATE services SET ${fields.join(', ')} WHERE id = ?`, values);
+    return true;
+}
+
+function deleteService(id) {
+    const before = queryAll('SELECT COUNT(*) as cnt FROM services WHERE id = ?', [id]);
+    if (before[0].cnt === 0) return false;
+    execute('DELETE FROM services WHERE id = ?', [id]);
+    return true;
+}
+
+// ======================================
 // NOTIFICATIONS
 // ======================================
 function getAllNotifications() {
@@ -230,9 +298,118 @@ function updateNotification(id, data) {
 }
 
 // ======================================
+// AUTH: USERS & SESSIONS
+// ======================================
+function hashPassword(password) {
+    return crypto.createHash('sha256').update(SALT + password).digest('hex');
+}
+
+function createUser(data) {
+    const existing = queryOne('SELECT id FROM users WHERE email = ?', [data.email]);
+    if (existing) return { error: 'Email đã tồn tại' };
+    const id = uuidv4();
+    execute(
+        'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', new Date().toISOString()]
+    );
+    return { id };
+}
+
+function getUserByEmail(email) {
+    return queryOne('SELECT * FROM users WHERE email = ?', [email]);
+}
+
+function getUserById(id) {
+    const u = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+    if (u) delete u.passwordHash;
+    return u;
+}
+
+function getAllUsers() {
+    return queryAll('SELECT id, fullName, email, role, createdAt FROM users');
+}
+
+function updateUserRole(id, role) {
+    const existing = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+    if (!existing) return false;
+    if (existing.role === 'superadmin') return false; // Không thể thay đổi superadmin
+    execute('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+    return true;
+}
+
+function updateUserProfile(id, data) {
+    const existing = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+    if (!existing) return false;
+    const fields = [];
+    const values = [];
+    if (data.fullName !== undefined) { fields.push('fullName = ?'); values.push(data.fullName); }
+    if (data.password !== undefined) { fields.push('passwordHash = ?'); values.push(hashPassword(data.password)); }
+    if (fields.length === 0) return true;
+    values.push(id);
+    execute(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    return true;
+}
+
+function deleteUser(id) {
+    const existing = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+    if (!existing || existing.role === 'superadmin') return false;
+    execute('DELETE FROM sessions WHERE userId = ?', [id]);
+    execute('DELETE FROM users WHERE id = ?', [id]);
+    return true;
+}
+
+function verifyPassword(email, password) {
+    const user = queryOne('SELECT * FROM users WHERE email = ?', [email]);
+    if (!user) return null;
+    if (user.passwordHash !== hashPassword(password)) return null;
+    const { passwordHash, ...safe } = user;
+    return safe;
+}
+
+function createSession(userId) {
+    const token = uuidv4();
+    execute('INSERT INTO sessions (token, userId, createdAt) VALUES (?, ?, ?)',
+        [token, userId, new Date().toISOString()]);
+    return token;
+}
+
+function getSession(token) {
+    if (!token) return null;
+    const session = queryOne('SELECT * FROM sessions WHERE token = ?', [token]);
+    if (!session) return null;
+    const user = queryOne('SELECT id, fullName, email, role, createdAt FROM users WHERE id = ?', [session.userId]);
+    return user || null;
+}
+
+function deleteSession(token) {
+    execute('DELETE FROM sessions WHERE token = ?', [token]);
+}
+
+// ======================================
 // SEED DATA (nếu database trống)
 // ======================================
 function seedIfEmpty() {
+    // Seed SuperAdmin nếu chưa có
+    const superAdmin = queryOne("SELECT id FROM users WHERE role = 'superadmin'");
+    if (!superAdmin) {
+        console.log('🔐 Tạo tài khoản SuperAdmin mặc định...');
+        createUser({ fullName: 'Super Admin', email: 'admin@aishop.com', password: 'admin123', role: 'superadmin' });
+        console.log('✅ SuperAdmin: admin@aishop.com / admin123');
+    }
+
+    // Seed services nếu chưa có
+    const svcCount = queryOne('SELECT COUNT(*) as cnt FROM services');
+    if (svcCount.cnt === 0) {
+        console.log('📦 Đang tạo dữ liệu dịch vụ mẫu...');
+        addService({ name: 'ChatGPT Plus', icon: 'ph-robot', color: '#10a37f' });
+        addService({ name: 'Canva Pro', icon: 'ph-paint-brush-broad', color: '#00c4cc' });
+        addService({ name: 'Adobe Creative Cloud', icon: 'ph-swatches', color: '#ff0000' });
+        addService({ name: 'Netflix Premium', icon: 'ph-video-camera', color: '#e50914' });
+        addService({ name: 'Midjourney', icon: 'ph-sailboat', color: '#7c3aed' });
+        addService({ name: 'Khác', icon: 'ph-atom', color: '#6366f1' });
+        console.log('✅ Dữ liệu dịch vụ mẫu đã tạo xong!');
+    }
+
     const count = queryOne('SELECT COUNT(*) as cnt FROM customers');
     if (count.cnt === 0) {
         console.log('📦 Đang tạo dữ liệu mẫu...');
@@ -254,6 +431,12 @@ module.exports = {
     initDatabase,
     getAllCustomers, getCustomer, addCustomer, updateCustomer, deleteCustomer,
     getAllAdmins, addAdmin, updateAdmin, deleteAdmin,
+    getAllServices, addService, updateService, deleteService,
     getAllNotifications, addNotification, updateNotification,
+    // Auth
+    createUser, getUserByEmail, getUserById, getAllUsers,
+    updateUserRole, updateUserProfile, deleteUser,
+    verifyPassword, hashPassword,
+    createSession, getSession, deleteSession,
     close: () => { if (db) { saveToFile(); db.close(); } }
 };

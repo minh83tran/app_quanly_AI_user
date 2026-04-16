@@ -70,7 +70,7 @@ document.addEventListener('click', function unlockAudio() {
 // ======================================
 // CACHE (API → RAM → render nhanh)
 // ======================================
-let cachedCustomers = [], cachedAdmins = [], cachedNotifications = [];
+let cachedCustomers = [], cachedAdmins = [], cachedNotifications = [], cachedServices = [];
 let currentFilterService = '', currentView = 'home';
 
 // DOM
@@ -85,6 +85,10 @@ const expiringBadge = document.getElementById('expiringBadge');
 const mainTitle = document.getElementById('mainTitle');
 const customModal = document.getElementById('customModal');
 const adminModal = document.getElementById('adminModal');
+const serviceModal = document.getElementById('serviceModal');
+const serviceTableBody = document.getElementById('serviceTableBody');
+const serviceTable = document.getElementById('serviceTable');
+const emptyServiceState = document.getElementById('emptyServiceState');
 
 const serviceIcons = {
     "ChatGPT Plus": '<i class="ph ph-robot" style="color:#10a37f"></i>',
@@ -165,6 +169,18 @@ async function fsUpdateNotification(id, data) {
     try { await apiPut(`/notifications/${id}`, data); }
     catch (e) { console.error(e); }
 }
+async function fsAddService(data) {
+    try { const r = await apiPost('/services', data); showToast('✅ Đã lưu Dịch Vụ!'); return r.id; }
+    catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
+}
+async function fsUpdateService(id, data) {
+    try { await apiPut(`/services/${id}`, data); showToast('✅ Đã cập nhật Dịch Vụ!'); }
+    catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
+}
+async function fsDeleteService(id) {
+    try { await apiDelete(`/services/${id}`); showToast('🗑️ Đã xóa Dịch Vụ.'); }
+    catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
+}
 
 // ======================================
 // SSE REAL-TIME (thay thế onSnapshot)
@@ -177,13 +193,21 @@ function setupSSE() {
             const msg = JSON.parse(event.data);
             if (msg.type === 'customers_changed') {
                 cachedCustomers = await apiGet('/customers');
-                if (currentView !== 'admins') renderTable(searchInput.value);
+                if (currentView !== 'admins' && currentView !== 'services') renderTable(searchInput.value);
+                if (currentView === 'services') renderServices();
                 updateExpiringBadge();
             }
             if (msg.type === 'admins_changed') {
                 cachedAdmins = await apiGet('/admins');
                 updateAdminSelects();
                 if (currentView === 'admins') renderAdmins();
+                updateStatCards();
+            }
+            if (msg.type === 'services_changed') {
+                cachedServices = await apiGet('/services');
+                buildServiceSidebar();
+                updateServiceSelects();
+                if (currentView === 'services') renderServices();
                 updateStatCards();
             }
             if (msg.type === 'notifications_changed') {
@@ -222,8 +246,10 @@ window.switchView = function (view, el) {
     if (el) el.classList.add('active');
     document.getElementById('viewCustomers').classList.remove('active');
     document.getElementById('viewAdmins').classList.remove('active');
+    document.getElementById('viewServices').classList.remove('active');
     currentView = view;
     if (view === 'admins') { document.getElementById('viewAdmins').classList.add('active'); renderAdmins(); }
+    else if (view === 'services') { document.getElementById('viewServices').classList.add('active'); renderServices(); }
     else {
         document.getElementById('viewCustomers').classList.add('active');
         currentFilterService = '';
@@ -267,6 +293,7 @@ function renderTable(searchTerm = '') {
         const dl = calculateDaysLeft(c.endDate), exp = dl <= 5;
         const admin = cachedAdmins.find(a => a.id == c.adminId);
         const aName = admin ? admin.name : "N/A", aEmail = admin ? admin.email : "";
+        const svcIcon = getServiceIcon(c.service);
 
         let badge = '';
         if (dl < 0) badge = `<span class="badge danger">Đã hết hạn (${Math.abs(dl)} ngày trước)</span>`;
@@ -284,7 +311,7 @@ function renderTable(searchTerm = '') {
         }
 
         tr.innerHTML = `
-            <td title="${c.name} — ${c.service}"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">${c.name}</div><div style="font-size:0.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${serviceIcons[c.service]||''} ${c.service}</div></td>
+            <td title="${c.name} — ${c.service}"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">${c.name}</div><div style="font-size:0.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${svcIcon} ${c.service}</div></td>
             <td title="${c.phone}">${c.phone}</td>
             <td title="${aName}"><div style="display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;"><i class="ph ph-identification-card"></i>${aName}</div></td>
             <td title="${c.email}" style="overflow:hidden;text-overflow:ellipsis;">${c.email}</td>
@@ -321,7 +348,75 @@ function updateAdminSelects() {
     document.getElementById('custAdmin').innerHTML = cachedAdmins.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 }
 
+function updateServiceSelects() {
+    document.getElementById('custService').innerHTML = cachedServices.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+}
+
+function getServiceIcon(serviceName) {
+    const svc = cachedServices.find(s => s.name === serviceName);
+    if (svc) return `<i class="ph ${svc.icon}" style="color:${svc.color}"></i>`;
+    return `<i class="ph ph-cube" style="color:var(--text-muted)"></i>`;
+}
+
+function buildServiceSidebar() {
+    const submenu = document.getElementById('serviceSubmenu');
+    if (!submenu) return;
+    let html = `<li onclick="filterByService('', this)"><i class="ph ph-list-bullets"></i> Mọi Dịch Vụ</li>`;
+    cachedServices.forEach(s => {
+        html += `<li onclick="filterByService('${s.name}', this)"><i class="ph ${s.icon}" style="color:${s.color}"></i> ${s.name}</li>`;
+    });
+    submenu.innerHTML = html;
+}
+
+function renderServices() {
+    serviceTableBody.innerHTML = '';
+    if (!cachedServices.length) { serviceTable.style.display = 'none'; emptyServiceState.style.display = 'flex'; return; }
+    serviceTable.style.display = 'table'; emptyServiceState.style.display = 'none';
+    cachedServices.forEach(s => {
+        const cnt = cachedCustomers.filter(c => c.service === s.name).length;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><div class="service-icon-preview"><i class="ph ${s.icon}" style="color:${s.color}; font-size:1.5rem;"></i></div></td>
+            <td><strong>${s.name}</strong></td>
+            <td><div style="display:flex;align-items:center;gap:8px;"><span class="service-color-swatch" style="background:${s.color};"></span><span style="color:var(--text-muted);font-size:0.85rem;">${s.color}</span></div></td>
+            <td>${cnt} khách hàng</td>
+            <td class="action-btns">
+                <button class="btn-icon" onclick="editService('${s.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
+                <button class="btn-icon delete" onclick="deleteService('${s.id}')" title="Xoá"><i class="ph ph-trash"></i></button>
+            </td>`;
+        serviceTableBody.appendChild(tr);
+    });
+}
+
 window.copyText = function (t) { navigator.clipboard.writeText(t).then(() => alert("Đã sao chép: " + t)); }
+
+// ======================================
+// CUSTOM CONFIRM DIALOG
+// ======================================
+function showConfirm(message, title = 'Xác nhận', icon = '⚠️') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        document.getElementById('confirmIcon').textContent = icon;
+        modal.classList.add('active');
+
+        const okBtn = document.getElementById('confirmOkBtn');
+        const cancelBtn = document.getElementById('confirmCancelBtn');
+
+        function cleanup() {
+            modal.classList.remove('active');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+        }
+
+        function onOk() { cleanup(); resolve(true); }
+        function onCancel() { cleanup(); resolve(false); }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+    });
+}
 
 // ======================================
 // NOTIFICATION CENTER
@@ -386,11 +481,13 @@ function updateStatCards() {
     const expiring = cachedCustomers.filter(x => calculateDaysLeft(x.endDate) <= 5).length;
     const active = total - expiring;
     const admins = cachedAdmins.length;
+    const services = cachedServices.length;
     
     animateValue('statTotal', total);
     animateValue('statExpiring', expiring);
     animateValue('statActive', active);
     animateValue('statAdmins', admins);
+    animateValue('statServices', services);
 }
 
 function animateValue(id, end) {
@@ -490,7 +587,8 @@ window.editCustomer = function (docId) {
 }
 
 window.deleteCustomer = async function (docId) {
-    if (confirm('Xóa khách hàng này?')) await fsDeleteCustomer(docId);
+    const ok = await showConfirm('Bạn có chắc muốn xóa khách hàng này?', 'Xóa Khách Hàng', '🗑️');
+    if (ok) await fsDeleteCustomer(docId);
 }
 
 // ======================================
@@ -527,7 +625,76 @@ window.editAdmin = function (docId) {
 }
 
 window.deleteAdmin = async function (docId) {
-    if (confirm('Xóa Quản Trị Viên này?')) await fsDeleteAdmin(docId);
+    const ok = await showConfirm('Bạn có chắc muốn xóa Quản Trị Viên này?', 'Xóa Quản Trị Viên', '🗑️');
+    if (ok) await fsDeleteAdmin(docId);
+}
+
+// ======================================
+// FORMS: SERVICE
+// ======================================
+document.getElementById('addServiceBtn').addEventListener('click', () => {
+    document.getElementById('serviceModalTitle').textContent = "Thêm Dịch Vụ";
+    document.getElementById('serviceForm').reset();
+    document.getElementById('serviceId').value = '';
+    document.getElementById('serviceColor').value = '#6366f1';
+    document.getElementById('serviceColorLabel').textContent = '#6366f1';
+    serviceModal.classList.add('active');
+});
+
+document.getElementById('closeServiceModal').addEventListener('click', () => {
+    serviceModal.classList.remove('active');
+    document.getElementById('serviceForm').reset();
+    document.getElementById('serviceId').value = '';
+});
+
+document.getElementById('cancelServiceBtn').addEventListener('click', () => {
+    serviceModal.classList.remove('active');
+    document.getElementById('serviceForm').reset();
+    document.getElementById('serviceId').value = '';
+});
+
+document.getElementById('serviceColor').addEventListener('input', (e) => {
+    document.getElementById('serviceColorLabel').textContent = e.target.value;
+});
+
+document.getElementById('serviceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('serviceId').value;
+    const data = {
+        name: document.getElementById('serviceName').value,
+        icon: document.getElementById('serviceIcon').value,
+        color: document.getElementById('serviceColor').value
+    };
+    try {
+        if (id) await fsUpdateService(id, data);
+        else await fsAddService(data);
+        serviceModal.classList.remove('active');
+        document.getElementById('serviceForm').reset();
+        document.getElementById('serviceId').value = '';
+    } catch (e) { console.error(e); }
+});
+
+window.editService = function (docId) {
+    const s = cachedServices.find(x => x.id === docId);
+    if (!s) return;
+    document.getElementById('serviceId').value = s.id;
+    document.getElementById('serviceName').value = s.name;
+    document.getElementById('serviceIcon').value = s.icon;
+    document.getElementById('serviceColor').value = s.color;
+    document.getElementById('serviceColorLabel').textContent = s.color;
+    document.getElementById('serviceModalTitle').textContent = "Chỉnh Sửa Dịch Vụ";
+    serviceModal.classList.add('active');
+}
+
+window.deleteService = async function (docId) {
+    const svc = cachedServices.find(x => x.id === docId);
+    const custCount = cachedCustomers.filter(c => c.service === (svc ? svc.name : '')).length;
+    let msg = 'Bạn có chắc muốn xóa Dịch Vụ này?';
+    if (custCount > 0) {
+        msg = `Dịch vụ "${svc.name}" đang có ${custCount} khách hàng sử dụng. Bạn có chắc muốn xóa?`;
+    }
+    const ok = await showConfirm(msg, 'Xóa Dịch Vụ', '🗑️');
+    if (ok) await fsDeleteService(docId);
 }
 
 searchInput.addEventListener('input', (e) => { if (currentView !== 'admins') renderTable(e.target.value); });
@@ -542,11 +709,14 @@ async function init() {
         // Tải dữ liệu ban đầu
         cachedCustomers = await apiGet('/customers');
         cachedAdmins = await apiGet('/admins');
+        cachedServices = await apiGet('/services');
         cachedNotifications = await apiGet('/notifications');
 
         // Render
+        buildServiceSidebar();
         renderTable();
         updateAdminSelects();
+        updateServiceSelects();
         updateExpiringBadge();
         renderNotifications();
         updateStatCards();

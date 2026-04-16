@@ -51,7 +51,125 @@ function broadcast(eventType) {
 }
 
 // ======================================
-// API: CUSTOMERS
+// AUTH MIDDLEWARE
+// ======================================
+function authMiddleware(req, res, next) {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Chưa đăng nhập' });
+    }
+    const token = auth.split(' ')[1];
+    const user = db.getSession(token);
+    if (!user) {
+        return res.status(401).json({ error: 'Phiên đăng nhập hết hạn' });
+    }
+    req.user = user;
+    req.token = token;
+    next();
+}
+
+function requireRole(...roles) {
+    return (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+            return res.status(403).json({ error: 'Không có quyền truy cập' });
+        }
+        next();
+    };
+}
+
+// ======================================
+// API: AUTH
+// ======================================
+app.post('/api/auth/register', (req, res) => {
+    try {
+        const { fullName, email, password } = req.body;
+        if (!fullName || !email || !password) {
+            return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin' });
+        }
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+        }
+        const result = db.createUser({ fullName, email, password, role: 'user' });
+        if (result.error) return res.status(400).json({ error: result.error });
+        res.status(201).json({ success: true, message: 'Đăng ký thành công!' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/auth/login', (req, res) => {
+    try {
+        const { email, password, loginAs } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Vui lòng nhập email và mật khẩu' });
+        }
+        const user = db.verifyPassword(email, password);
+        if (!user) {
+            return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng' });
+        }
+        // Nếu đăng nhập qua luồng Quản Trị Viên, kiểm tra quyền
+        if (loginAs === 'admin' && user.role === 'user') {
+            return res.status(403).json({ error: 'Tài khoản không có quyền Quản Trị Viên' });
+        }
+        const token = db.createSession(user.id);
+        res.json({ token, user });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/auth/logout', authMiddleware, (req, res) => {
+    try {
+        db.deleteSession(req.token);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/auth/me', authMiddleware, (req, res) => {
+    res.json(req.user);
+});
+
+// ======================================
+// API: USERS (SuperAdmin only)
+// ======================================
+app.get('/api/users', authMiddleware, requireRole('superadmin'), (req, res) => {
+    try {
+        res.json(db.getAllUsers());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/users/:id/role', authMiddleware, requireRole('superadmin'), (req, res) => {
+    try {
+        const { role } = req.body;
+        if (!['user', 'admin'].includes(role)) {
+            return res.status(400).json({ error: 'Role không hợp lệ' });
+        }
+        const ok = db.updateUserRole(req.params.id, role);
+        if (!ok) return res.status(404).json({ error: 'Không tìm thấy hoặc không thể thay đổi' });
+        broadcast('users_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/users/:id', authMiddleware, requireRole('superadmin'), (req, res) => {
+    try {
+        const ok = db.deleteUser(req.params.id);
+        if (!ok) return res.status(404).json({ error: 'Không tìm thấy hoặc không thể xóa' });
+        broadcast('users_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
+// API: CUSTOMERS (yêu cầu đăng nhập + role admin)
 // ======================================
 app.get('/api/customers', (req, res) => {
     try {
@@ -130,6 +248,49 @@ app.delete('/api/admins/:id', (req, res) => {
         const ok = db.deleteAdmin(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('admins_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
+// API: SERVICES
+// ======================================
+app.get('/api/services', (req, res) => {
+    try {
+        res.json(db.getAllServices());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/services', (req, res) => {
+    try {
+        const id = db.addService(req.body);
+        broadcast('services_changed');
+        res.status(201).json({ id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/services/:id', (req, res) => {
+    try {
+        const ok = db.updateService(req.params.id, req.body);
+        if (!ok) return res.status(404).json({ error: 'Not found' });
+        broadcast('services_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/services/:id', (req, res) => {
+    try {
+        const ok = db.deleteService(req.params.id);
+        if (!ok) return res.status(404).json({ error: 'Not found' });
+        broadcast('services_changed');
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });

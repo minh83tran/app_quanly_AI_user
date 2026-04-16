@@ -51,6 +51,7 @@
                 </li>
 
                 <li onclick="switchView('admins', this)"><i class="ph ph-chalkboard-teacher"></i> Quản Trị Viên</li>
+                <li onclick="switchView('services', this)"><i class="ph ph-squares-four"></i> Quản Lý Dịch Vụ</li>
             </ul>
         </aside>
 
@@ -117,6 +118,13 @@
                             <span class="stat-label">Quản Trị Viên</span>
                         </div>
                     </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa);"><i class="ph ph-squares-four"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statServices">0</span>
+                            <span class="stat-label">Dịch Vụ</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="actions-bar">
@@ -173,6 +181,34 @@
                     <div id="emptyAdminState" class="empty-state" style="display: none;">
                         <i class="ph ph-users"></i>
                         <p>Chưa có Quản Trị Viên nào</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: SERVICES -->
+            <div id="viewServices" class="view-section">
+                <div class="actions-bar">
+                    <h1 class="page-title">Quản Lý Dịch Vụ</h1>
+                    <button class="btn-primary" id="addServiceBtn"><i class="ph ph-plus"></i> Thêm Dịch Vụ</button>
+                </div>
+                <div class="table-container glass-panel">
+                    <table id="serviceTable">
+                        <thead>
+                            <tr>
+                                <th>Biểu Tượng</th>
+                                <th>Tên Dịch Vụ</th>
+                                <th>Màu Sắc</th>
+                                <th>Số Khách Hàng</th>
+                                <th>Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="serviceTableBody">
+                            <!-- Service Data -->
+                        </tbody>
+                    </table>
+                    <div id="emptyServiceState" class="empty-state" style="display: none;">
+                        <i class="ph ph-squares-four"></i>
+                        <p>Chưa có Dịch Vụ nào</p>
                     </div>
                 </div>
             </div>
@@ -267,6 +303,66 @@
                     <button type="submit" class="btn-primary">Lưu Lại</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal for Service -->
+    <div class="modal-overlay" id="serviceModal">
+        <div class="modal-content glass-panel-modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 id="serviceModalTitle">Thêm Dịch Vụ</h3>
+                <i class="ph ph-x" id="closeServiceModal"></i>
+            </div>
+            <form id="serviceForm">
+                <input type="hidden" id="serviceId">
+                <div class="form-group">
+                    <label>Tên Dịch Vụ</label>
+                    <input type="text" id="serviceName" required placeholder="Ví dụ: ChatGPT Plus">
+                </div>
+                <div class="form-group">
+                    <label>Biểu Tượng (Phosphor Icon)</label>
+                    <select id="serviceIcon">
+                        <option value="ph-robot">🤖 Robot (AI)</option>
+                        <option value="ph-paint-brush-broad">🎨 Cọ Vẽ (Design)</option>
+                        <option value="ph-swatches">🎭 Bảng Màu (Creative)</option>
+                        <option value="ph-video-camera">🎬 Camera (Video)</option>
+                        <option value="ph-sailboat">⛵ Thuyền (Midjourney)</option>
+                        <option value="ph-music-notes">🎵 Âm Nhạc</option>
+                        <option value="ph-game-controller">🎮 Game</option>
+                        <option value="ph-cloud">☁️ Cloud</option>
+                        <option value="ph-code">💻 Code</option>
+                        <option value="ph-globe">🌐 Web</option>
+                        <option value="ph-shield-check">🛡️ Bảo Mật</option>
+                        <option value="ph-database">🗄️ Database</option>
+                        <option value="ph-cube">📦 Cube</option>
+                        <option value="ph-atom">⚛️ Khác</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Màu Sắc</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="color" id="serviceColor" value="#6366f1" style="width: 50px; height: 40px; padding: 2px; cursor: pointer; border-radius: 8px;">
+                        <span id="serviceColorLabel" style="color: var(--text-muted); font-size: 0.9rem;">#6366f1</span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="cancelServiceBtn">Hủy</button>
+                    <button type="submit" class="btn-primary">Lưu Lại</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Dialog -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-content glass-panel-modal" style="max-width: 420px; text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 16px;" id="confirmIcon">⚠️</div>
+            <h3 id="confirmTitle" style="margin-bottom: 12px;">Xác nhận</h3>
+            <p id="confirmMessage" style="color: var(--text-muted); margin-bottom: 24px; line-height: 1.6;">Bạn có chắc muốn thực hiện?</p>
+            <div class="modal-actions" style="justify-content: center;">
+                <button class="btn-secondary" id="confirmCancelBtn">Hủy</button>
+                <button class="btn-primary" id="confirmOkBtn" style="background: var(--danger);">Xóa</button>
+            </div>
         </div>
     </div>
 
