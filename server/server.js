@@ -82,16 +82,21 @@ function requireRole(...roles) {
 // ======================================
 app.post('/api/auth/register', (req, res) => {
     try {
-        const { fullName, email, password } = req.body;
-        if (!fullName || !email || !password) {
-            return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin' });
+        const { fullName, email, password, inviteCode } = req.body;
+        if (!fullName || !email || !password || !inviteCode) {
+            return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin và mã bảo mật' });
         }
         if (password.length < 6) {
             return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
         }
-        const result = db.createUser({ fullName, email, password, role: 'user' });
+        const currentInviteCode = db.getSetting('admin_invite_code');
+        if (inviteCode !== currentInviteCode) {
+            return res.status(403).json({ error: 'Mã xác nhận bảo mật không đúng' });
+        }
+
+        const result = db.createUser({ fullName, email, password, role: 'admin' });
         if (result.error) return res.status(400).json({ error: result.error });
-        res.status(201).json({ success: true, message: 'Đăng ký thành công!' });
+        res.status(201).json({ success: true, message: 'Đăng ký Quản Trị Viên thành công!' });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -99,17 +104,13 @@ app.post('/api/auth/register', (req, res) => {
 
 app.post('/api/auth/login', (req, res) => {
     try {
-        const { email, password, loginAs } = req.body;
+        const { email, password } = req.body;
         if (!email || !password) {
             return res.status(400).json({ error: 'Vui lòng nhập email và mật khẩu' });
         }
         const user = db.verifyPassword(email, password);
         if (!user) {
             return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng' });
-        }
-        // Nếu đăng nhập qua luồng Quản Trị Viên, kiểm tra quyền
-        if (loginAs === 'admin' && user.role === 'user') {
-            return res.status(403).json({ error: 'Tài khoản không có quyền Quản Trị Viên' });
         }
         const token = db.createSession(user.id);
         res.json({ token, user });
@@ -132,24 +133,42 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 });
 
 // ======================================
-// API: USERS (SuperAdmin only)
+// API: USERS / PERSONNEL (Quản lý Nhân Sự)
 // ======================================
-app.get('/api/users', authMiddleware, requireRole('superadmin'), (req, res) => {
+app.get('/api/users', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
     try {
-        res.json(db.getAllUsers());
+        // Chỉ lấy những tài khoản không phải superadmin để hiển thị trong mục Quản Lý Nhân Sự
+        const users = db.getAllUsers().filter(u => u.role !== 'superadmin');
+        res.json(users);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.put('/api/users/:id/role', authMiddleware, requireRole('superadmin'), (req, res) => {
+app.post('/api/users', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
     try {
-        const { role } = req.body;
-        if (!['user', 'admin'].includes(role)) {
-            return res.status(400).json({ error: 'Role không hợp lệ' });
+        const { fullName, email, password, role } = req.body;
+        // Quản trị viên chỉ được tạo Nhân viên (staff). Superadmin có thể tạo Quản trị viên (admin).
+        const targetRole = (req.user.role === 'admin') ? 'staff' : (role || 'staff');
+        const result = db.createUser({ fullName, email, password: password || '123456', role: targetRole });
+        if (result.error) return res.status(400).json({ error: result.error });
+        broadcast('users_changed');
+        res.status(201).json({ id: result.id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
+    try {
+        // Cập nhật profile (fullName, role, password)
+        // Lưu ý: role update sẽ được xử lý riêng hoặc gộp ở đây, nhưng db.updateUserProfile chỉ update fullName/password.
+        // Ta cần hỗ trợ update role cho linh hoạt
+        const okProfile = db.updateUserProfile(req.params.id, req.body);
+        if (req.body.role && req.user.role === 'superadmin') {
+             db.updateUserRole(req.params.id, req.body.role);
         }
-        const ok = db.updateUserRole(req.params.id, role);
-        if (!ok) return res.status(404).json({ error: 'Không tìm thấy hoặc không thể thay đổi' });
+        if (!okProfile) return res.status(404).json({ error: 'Không tìm thấy' });
         broadcast('users_changed');
         res.json({ success: true });
     } catch (e) {
@@ -157,10 +176,15 @@ app.put('/api/users/:id/role', authMiddleware, requireRole('superadmin'), (req, 
     }
 });
 
-app.delete('/api/users/:id', authMiddleware, requireRole('superadmin'), (req, res) => {
+app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
     try {
+        // Không cho phép admin xóa một admin khác.
+        const targetUser = db.getUserById(req.params.id);
+        if (req.user.role === 'admin' && targetUser && targetUser.role === 'admin') {
+            return res.status(403).json({ error: 'Không thể xóa Quản Trị Viên khác' });
+        }
         const ok = db.deleteUser(req.params.id);
-        if (!ok) return res.status(404).json({ error: 'Không tìm thấy hoặc không thể xóa' });
+        if (!ok) return res.status(404).json({ error: 'Không thể xóa' });
         broadcast('users_changed');
         res.json({ success: true });
     } catch (e) {
@@ -212,46 +236,15 @@ app.delete('/api/customers/:id', (req, res) => {
 });
 
 // ======================================
-// API: ADMINS
+// API: CÀI ĐẶT (SETTINGS)
 // ======================================
-app.get('/api/admins', (req, res) => {
-    try {
-        res.json(db.getAllAdmins());
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+app.get('/api/settings/invite-code', authMiddleware, requireRole('superadmin'), (req, res) => {
+    res.json({ code: db.getSetting('admin_invite_code') });
 });
 
-app.post('/api/admins', (req, res) => {
-    try {
-        const id = db.addAdmin(req.body);
-        broadcast('admins_changed');
-        res.status(201).json({ id });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.put('/api/admins/:id', (req, res) => {
-    try {
-        const ok = db.updateAdmin(req.params.id, req.body);
-        if (!ok) return res.status(404).json({ error: 'Not found' });
-        broadcast('admins_changed');
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.delete('/api/admins/:id', (req, res) => {
-    try {
-        const ok = db.deleteAdmin(req.params.id);
-        if (!ok) return res.status(404).json({ error: 'Not found' });
-        broadcast('admins_changed');
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+app.post('/api/settings/invite-code', authMiddleware, requireRole('superadmin'), (req, res) => {
+    const code = db.generateInviteCode();
+    res.json({ code });
 });
 
 // ======================================

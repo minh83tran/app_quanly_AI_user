@@ -9,9 +9,25 @@ if (window.location.protocol === 'file:') {
 // ======================================
 // CẤU HÌNH EMAILJS
 // ======================================
-const EMAILJS_PUBLIC_KEY = "YOUR_PUBLIC_KEY_HERE";
-const EMAILJS_SERVICE_ID = "YOUR_SERVICE_ID_HERE";
-const EMAILJS_TEMPLATE_ID = "YOUR_TEMPLATE_ID_HERE";
+const EMAILJS_PUBLIC_KEY = "YOUR_PUBLIC_KEY_HERE"; // Thay bằng Public Key của bạn
+const EMAILJS_SERVICE_ID = "YOUR_SERVICE_ID_HERE"; // Thay bằng Service ID của bạn
+const EMAILJS_TEMPLATE_ID = "YOUR_TEMPLATE_ID_HERE"; // Thay bằng Template ID của bạn
+
+// ======================================
+// USER STATE
+// ======================================
+let currentUser = null;
+try {
+    const userStr = localStorage.getItem('aishop_user');
+    if (userStr) currentUser = JSON.parse(userStr);
+} catch (e) {
+    console.error("Không thể đọc thông tin người dùng", e);
+}
+
+// Nếu chưa có user thì chuyển về trang đăng nhập
+if (!currentUser) {
+    window.location.href = '/login.html';
+}
 
 if (typeof emailjs !== 'undefined') emailjs.init(EMAILJS_PUBLIC_KEY);
 
@@ -70,7 +86,7 @@ document.addEventListener('click', function unlockAudio() {
 // ======================================
 // CACHE (API → RAM → render nhanh)
 // ======================================
-let cachedCustomers = [], cachedAdmins = [], cachedNotifications = [], cachedServices = [];
+let cachedCustomers = [], cachedPersonnel = [], cachedNotifications = [], cachedServices = [];
 let currentFilterService = '', currentView = 'home';
 
 // DOM
@@ -102,8 +118,15 @@ const serviceIcons = {
 // ======================================
 // API HELPERS (thay thế Firestore CRUD)
 // ======================================
+function getHeaders() {
+    const token = localStorage.getItem('aishop_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+}
+
 async function apiGet(path) {
-    const res = await fetch(`${API_BASE}${path}`);
+    const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return res.json();
 }
@@ -111,7 +134,7 @@ async function apiGet(path) {
 async function apiPost(path, data) {
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -121,7 +144,7 @@ async function apiPost(path, data) {
 async function apiPut(path, data) {
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -129,7 +152,10 @@ async function apiPut(path, data) {
 }
 
 async function apiDelete(path) {
-    const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}${path}`, { 
+        method: 'DELETE',
+        headers: getHeaders()
+    });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return res.json();
 }
@@ -149,16 +175,16 @@ async function fsDeleteCustomer(id) {
     try { await apiDelete(`/customers/${id}`); showToast('🗑️ Đã xóa khách hàng.'); }
     catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
 }
-async function fsAddAdmin(data) {
-    try { const r = await apiPost('/admins', data); showToast('✅ Đã lưu Quản Trị Viên!'); return r.id; }
+async function fsAddUser(data) {
+    try { const r = await apiPost('/users', data); showToast('✅ Đã lưu Nhân Sự!'); return r.id; }
     catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
 }
-async function fsUpdateAdmin(id, data) {
-    try { await apiPut(`/admins/${id}`, data); showToast('✅ Đã cập nhật Quản Trị Viên!'); }
+async function fsUpdateUser(id, data) {
+    try { await apiPut(`/users/${id}`, data); showToast('✅ Đã cập nhật Nhân Sự!'); }
     catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
 }
-async function fsDeleteAdmin(id) {
-    try { await apiDelete(`/admins/${id}`); showToast('🗑️ Đã xóa Quản Trị Viên.'); }
+async function fsDeleteUser(id) {
+    try { await apiDelete(`/users/${id}`); showToast('🗑️ Đã xóa Nhân Sự.'); }
     catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
 }
 async function fsAddNotification(data) {
@@ -197,10 +223,10 @@ function setupSSE() {
                 if (currentView === 'services') renderServices();
                 updateExpiringBadge();
             }
-            if (msg.type === 'admins_changed') {
-                cachedAdmins = await apiGet('/admins');
+            if (msg.type === 'users_changed') {
+                cachedPersonnel = await apiGet('/users');
                 updateAdminSelects();
-                if (currentView === 'admins') renderAdmins();
+                if (currentView === 'admins') renderPersonnel();
                 updateStatCards();
             }
             if (msg.type === 'services_changed') {
@@ -248,7 +274,7 @@ window.switchView = function (view, el) {
     document.getElementById('viewAdmins').classList.remove('active');
     document.getElementById('viewServices').classList.remove('active');
     currentView = view;
-    if (view === 'admins') { document.getElementById('viewAdmins').classList.add('active'); renderAdmins(); }
+    if (view === 'admins') { document.getElementById('viewAdmins').classList.add('active'); renderPersonnel(); }
     else if (view === 'services') { document.getElementById('viewServices').classList.add('active'); renderServices(); }
     else {
         document.getElementById('viewCustomers').classList.add('active');
@@ -291,8 +317,8 @@ function renderTable(searchTerm = '') {
 
     filtered.forEach(c => {
         const dl = calculateDaysLeft(c.endDate), exp = dl <= 5;
-        const admin = cachedAdmins.find(a => a.id == c.adminId);
-        const aName = admin ? admin.name : "N/A", aEmail = admin ? admin.email : "";
+        const admin = cachedPersonnel.find(a => a.id == c.adminId);
+        const aName = admin ? admin.fullName : "N/A", aEmail = admin ? admin.email : "";
         const svcIcon = getServiceIcon(c.service);
 
         let badge = '';
@@ -310,6 +336,10 @@ function renderTable(searchTerm = '') {
             mailBtn = `<a href="mailto:${aEmail}?subject=${subj}&body=${body}" target="_blank" class="btn-icon mail" title="Gửi mail"><i class="ph ph-envelope-simple"></i></a>`;
         }
 
+        let actionBtns = '';
+        actionBtns += `<button class="btn-icon" onclick="editCustomer('${c.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
+                       <button class="btn-icon delete" onclick="deleteCustomer('${c.id}')" title="Xoá"><i class="ph ph-trash"></i></button>`;
+
         tr.innerHTML = `
             <td title="${c.name} — ${c.service}"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">${c.name}</div><div style="font-size:0.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${svcIcon} ${c.service}</div></td>
             <td title="${c.phone}">${c.phone}</td>
@@ -320,32 +350,32 @@ function renderTable(searchTerm = '') {
             <td>${formatDate(c.endDate)}</td>
             <td style="white-space:normal;">${badge}</td>
             <td class="action-btns">${mailBtn}
-                <button class="btn-icon" onclick="editCustomer('${c.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
-                <button class="btn-icon delete" onclick="deleteCustomer('${c.id}')" title="Xoá"><i class="ph ph-trash"></i></button>
+                ${actionBtns}
             </td>`;
         tableBody.appendChild(tr);
     });
 }
 
-function renderAdmins() {
+function renderPersonnel() {
     adminTableBody.innerHTML = '';
-    if (!cachedAdmins.length) { adminTable.style.display = 'none'; emptyAdminState.style.display = 'flex'; return; }
+    if (!cachedPersonnel.length) { adminTable.style.display = 'none'; emptyAdminState.style.display = 'flex'; return; }
     adminTable.style.display = 'table'; emptyAdminState.style.display = 'none';
-    cachedAdmins.forEach(a => {
-        const cnt = cachedCustomers.filter(c => c.adminId == a.id).length;
+    cachedPersonnel.forEach(a => {
+        const roleLabel = (a.role === 'admin') ? '<span class="badge warning">Quản Trị Viên</span>' : '<span class="badge safe">Nhân Viên</span>';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><strong>${a.name}</strong></td><td>${a.email}</td><td>${cnt} khách hàng</td>
+            <td>${roleLabel}</td>
+            <td><strong>${a.fullName}</strong></td><td>${a.email}</td>
             <td class="action-btns">
-                <button class="btn-icon" onclick="editAdmin('${a.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
-                <button class="btn-icon delete" onclick="deleteAdmin('${a.id}')" title="Xoá"><i class="ph ph-trash"></i></button>
+                <button class="btn-icon" onclick="editUser('${a.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
+                <button class="btn-icon delete" onclick="deleteUser('${a.id}')" title="Xoá"><i class="ph ph-trash"></i></button>
             </td>`;
         adminTableBody.appendChild(tr);
     });
 }
 
 function updateAdminSelects() {
-    document.getElementById('custAdmin').innerHTML = cachedAdmins.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    document.getElementById('custAdmin').innerHTML = cachedPersonnel.map(a => `<option value="${a.id}">${a.fullName} (${a.role === 'admin' ? 'QTV' : 'NV'})</option>`).join('');
 }
 
 function updateServiceSelects() {
@@ -425,11 +455,11 @@ function processAutomatedEmails() {
     cachedCustomers.forEach(async c => {
         const dl = calculateDaysLeft(c.endDate);
         if (dl <= 5 && !c.isEmailSent) {
-            const admin = cachedAdmins.find(a => a.id == c.adminId);
-            if (admin && admin.email && EMAILJS_PUBLIC_KEY !== "YOUR_PUBLIC_KEY_HERE") {
+            const admin = cachedPersonnel.find(a => a.id == c.adminId);
+            if (admin && admin.email && EMAILJS_PUBLIC_KEY !== "YOUR_PUBLIC_KEY_HERE" && EMAILJS_PUBLIC_KEY !== "admin") {
                 try {
                     await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-                        to_email: admin.email, admin_name: admin.name,
+                        to_email: admin.email, admin_name: admin.fullName,
                         customer_name: c.name, customer_service: c.service, days_left: dl
                     });
                 } catch (e) { console.error(e); }
@@ -480,7 +510,7 @@ function updateStatCards() {
     const total = cachedCustomers.length;
     const expiring = cachedCustomers.filter(x => calculateDaysLeft(x.endDate) <= 5).length;
     const active = total - expiring;
-    const admins = cachedAdmins.length;
+    const admins = cachedPersonnel.length;
     const services = cachedServices.length;
     
     animateValue('statTotal', total);
@@ -592,10 +622,16 @@ window.deleteCustomer = async function (docId) {
 }
 
 // ======================================
-// FORMS: ADMIN
+// FORMS: PERSONNEL (Nhân Sự)
 // ======================================
 document.getElementById('addAdminBtn').addEventListener('click', () => {
-    document.getElementById('adminModalTitle').textContent = "Thêm Quản Trị Viên";
+    document.getElementById('adminModalTitle').textContent = "Thêm Nhân Sự";
+    if (currentUser && currentUser.role === 'superadmin') {
+        document.getElementById('roleSelectorCol').style.display = 'block';
+    } else {
+        document.getElementById('roleSelectorCol').style.display = 'none';
+        document.getElementById('adminRole').value = 'staff'; // admin chỉ có thể tạo staff
+    }
     adminModal.classList.add('active');
 });
 document.getElementById('closeAdminModal').addEventListener('click', () => { adminModal.classList.remove('active'); document.getElementById('adminForm').reset(); document.getElementById('adminId').value = ''; });
@@ -604,29 +640,43 @@ document.getElementById('cancelAdminBtn').addEventListener('click', () => { admi
 document.getElementById('adminForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = document.getElementById('adminId').value;
-    const data = { name: document.getElementById('adminName').value, email: document.getElementById('adminEmail').value };
+    const data = { 
+        fullName: document.getElementById('adminName').value, 
+        email: document.getElementById('adminEmail').value,
+        password: document.getElementById('adminPwd').value,
+        role: document.getElementById('adminRole').value
+    };
     try {
-        if (id) await fsUpdateAdmin(id, data);
-        else await fsAddAdmin(data);
+        if (id) await fsUpdateUser(id, data);
+        else await fsAddUser(data);
         adminModal.classList.remove('active');
         document.getElementById('adminForm').reset();
         document.getElementById('adminId').value = '';
     } catch (e) { console.error(e); }
 });
 
-window.editAdmin = function (docId) {
-    const a = cachedAdmins.find(x => x.id === docId);
+window.editUser = function (docId) {
+    const a = cachedPersonnel.find(x => x.id === docId);
     if (!a) return;
     document.getElementById('adminId').value = a.id;
-    document.getElementById('adminName').value = a.name;
+    document.getElementById('adminName').value = a.fullName;
     document.getElementById('adminEmail').value = a.email;
-    document.getElementById('adminModalTitle').textContent = "Chỉnh Sửa Quản Trị Viên";
+    document.getElementById('adminRole').value = a.role || 'staff';
+    document.getElementById('adminPwd').value = '';
+    
+    if (currentUser && currentUser.role === 'superadmin') {
+        document.getElementById('roleSelectorCol').style.display = 'block';
+    } else {
+        document.getElementById('roleSelectorCol').style.display = 'none';
+    }
+    
+    document.getElementById('adminModalTitle').textContent = "Chỉnh Sửa Nhân Sự";
     adminModal.classList.add('active');
 }
 
-window.deleteAdmin = async function (docId) {
-    const ok = await showConfirm('Bạn có chắc muốn xóa Quản Trị Viên này?', 'Xóa Quản Trị Viên', '🗑️');
-    if (ok) await fsDeleteAdmin(docId);
+window.deleteUser = async function (docId) {
+    const ok = await showConfirm('Bạn có chắc muốn xóa nhân sự này?', 'Xóa Nhân Sự', '🗑️');
+    if (ok) await fsDeleteUser(docId);
 }
 
 // ======================================
@@ -700,15 +750,93 @@ window.deleteService = async function (docId) {
 searchInput.addEventListener('input', (e) => { if (currentView !== 'admins') renderTable(e.target.value); });
 
 // ======================================
+// PHÂN QUYỀN GIAO DIỆN LUN (UI TRIM)
+// ======================================
+function applyRolePermissions() {
+    if (!currentUser) return;
+    
+    // Đổi tên tài khoản trên header
+    const userNameEl = document.querySelector('.user-profile span');
+    if (userNameEl) {
+        userNameEl.textContent = currentUser.fullName || 'Người Dùng';
+        
+        // Thêm nút đăng xuất
+        const logoutBtn = document.createElement('i');
+        logoutBtn.className = 'ph ph-sign-out';
+        logoutBtn.style.cursor = 'pointer';
+        logoutBtn.style.fontSize = '1.2rem';
+        logoutBtn.style.color = 'var(--text-muted)';
+        logoutBtn.title = 'Đăng xuất';
+        logoutBtn.onclick = async () => {
+            if (confirm('Bạn muốn đăng xuất?')) {
+                const token = localStorage.getItem('aishop_token');
+                if (token) {
+                    await fetch(`${API_BASE}/auth/logout`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }).catch(() => {});
+                }
+                localStorage.removeItem('aishop_token');
+                localStorage.removeItem('aishop_user');
+                window.location.href = '/login.html';
+            }
+        };
+        userNameEl.parentElement.appendChild(logoutBtn);
+    }
+    
+    // Nếu là user/staff, ẩn các tính năng quản trị
+    if (currentUser.role === 'user' || currentUser.role === 'staff') {
+        const navItems = document.querySelectorAll('.nav-links > li');
+        navItems.forEach(li => {
+            if (li.getAttribute('onclick') === "switchView('admins', this)") li.style.display = 'none';
+            if (li.getAttribute('onclick') === "switchView('services', this)") li.style.display = 'none';
+        });
+    }
+
+    if (currentUser.role === 'superadmin') {
+        const superadminSettings = document.getElementById('superadminSettings');
+        if (superadminSettings) superadminSettings.style.display = 'block';
+        fetchInviteCode();
+    }
+}
+
+async function fetchInviteCode() {
+    try {
+        const token = localStorage.getItem('aishop_token');
+        const res = await fetch(`${API_BASE}/settings/invite-code`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data && data.code) document.getElementById('inviteCodeDisplay').textContent = data.code;
+    } catch (e) { console.error(e); }
+}
+
+window.regenerateInviteCode = async function() {
+    if(confirm("Bạn có chắc muốn đổi mã bảo mật? Mã cũ sẽ không còn hiệu lực.")) {
+        try {
+            const token = localStorage.getItem('aishop_token');
+            const res = await fetch(`${API_BASE}/settings/invite-code`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data && data.code) document.getElementById('inviteCodeDisplay').textContent = data.code;
+            showToast("✅ Đã đổi mã bảo mật thành công!");
+        } catch (e) { console.error(e); }
+    }
+}
+
+// ======================================
 // KHỞI ĐỘNG
 // ======================================
 async function init() {
     try {
+        applyRolePermissions();
         showToast("⏳ Đang kết nối Server...");
 
-        // Tải dữ liệu ban đầu
+        // Tải dữ liệu ban đầu (apiGet giờ đã có auth headers)
         cachedCustomers = await apiGet('/customers');
-        cachedAdmins = await apiGet('/admins');
+        cachedPersonnel = await apiGet('/users');
         cachedServices = await apiGet('/services');
         cachedNotifications = await apiGet('/notifications');
 

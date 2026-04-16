@@ -50,7 +50,7 @@
                     <span id="expiringBadge" class="sidebar-badge" style="display:none;">0</span>
                 </li>
 
-                <li onclick="switchView('admins', this)"><i class="ph ph-chalkboard-teacher"></i> Quản Trị Viên</li>
+                <li onclick="switchView('admins', this)"><i class="ph ph-users-three"></i> Quản Lý Nhân Sự</li>
                 <li onclick="switchView('services', this)"><i class="ph ph-squares-four"></i> Quản Lý Dịch Vụ</li>
             </ul>
         </aside>
@@ -115,7 +115,7 @@
                         <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #fbbf24);"><i class="ph ph-chalkboard-teacher"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statAdmins">0</span>
-                            <span class="stat-label">Quản Trị Viên</span>
+                            <span class="stat-label">Tổng Nhân Sự</span>
                         </div>
                     </div>
                     <div class="stat-card glass-panel">
@@ -157,20 +157,33 @@
                 </div>
             </div>
 
-            <!-- VIEW: ADMINS -->
+            <!-- VIEW: PERSONNEL -->
             <div id="viewAdmins" class="view-section">
+                <!-- Vùng dành cho SuperAdmin hiển thị mã mời -->
+                <div id="superadminSettings" style="display: none; padding: 16px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; margin-bottom: 24px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h3 style="margin: 0; color: #818cf8; font-size: 1.1rem;"><i class="ph ph-shield-check"></i> Cài đặt Hệ thống (Chỉ dành cho Admin)</h3>
+                            <p style="margin: 4px 0 0 0; font-size: 0.9rem; color: var(--text-muted);">Mã bảo mật để đăng ký tài khoản Quản Trị Viên bên ngoài:</p>
+                        </div>
+                        <div style="display:flex; align-items:center; gap: 12px;">
+                            <span id="inviteCodeDisplay" style="font-size: 1.5rem; font-weight: bold; letter-spacing: 4px; color: var(--text-main);">------</span>
+                            <button class="btn-primary" onclick="regenerateInviteCode()" style="padding: 8px 16px; font-size: 0.9rem;"><i class="ph ph-arrows-clockwise"></i> Đổi Mã</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="actions-bar">
-                    <h1 class="page-title">Thông Tin Quản Trị Viên</h1>
-                    <button class="btn-primary" id="addAdminBtn"><i class="ph ph-user-plus"></i> Thêm Quản Trị
-                        Viên</button>
+                    <h1 class="page-title">Quản Lý Nhân Sự (NV & QTV)</h1>
+                    <button class="btn-primary" id="addAdminBtn"><i class="ph ph-user-plus"></i> Thêm Nhân Sự</button>
                 </div>
                 <div class="table-container glass-panel">
                     <table id="adminTable">
                         <thead>
                             <tr>
-                                <th>Tên Quản Trị Viên</th>
-                                <th>Email Nhận Thông Báo</th>
-                                <th>Khách Đang Quản Lý</th>
+                                <th>Hệ thống (Vai trò)</th>
+                                <th>Họ và Tên</th>
+                                <th>Tài khoản (Email)</th>
                                 <th>Hành Động</th>
                             </tr>
                         </thead>
@@ -180,7 +193,7 @@
                     </table>
                     <div id="emptyAdminState" class="empty-state" style="display: none;">
                         <i class="ph ph-users"></i>
-                        <p>Chưa có Quản Trị Viên nào</p>
+                        <p>Chưa có nhân sự nào khác</p>
                     </div>
                 </div>
             </div>
@@ -247,9 +260,9 @@
                         </select>
                     </div>
                     <div class="col">
-                        <label>Quản Trị Viên Quản Lý</label>
+                        <label>Người Quản Lý</label>
                         <select id="custAdmin" required>
-                            <!-- Admins inserted here -->
+                            <!-- Users inserted here -->
                         </select>
                     </div>
                 </div>
@@ -281,22 +294,37 @@
         </div>
     </div>
 
-    <!-- Modal for Admin -->
+    <!-- Modal for Personnel -->
     <div class="modal-overlay" id="adminModal">
-        <div class="modal-content glass-panel-modal" style="max-width: 400px;">
+        <div class="modal-content glass-panel-modal" style="max-width: 480px;">
             <div class="modal-header">
-                <h3 id="adminModalTitle">Thêm Quản Trị Viên</h3>
+                <h3 id="adminModalTitle">Thêm Nhân Sự</h3>
                 <i class="ph ph-x" id="closeAdminModal"></i>
             </div>
             <form id="adminForm">
                 <input type="hidden" id="adminId">
-                <div class="form-group">
-                    <label>Tên Quản Trị Viên</label>
-                    <input type="text" id="adminName" required placeholder="Ví dụ: Hoàng Minh">
+                <div class="form-group row">
+                    <div class="col">
+                        <label>Họ và Tên</label>
+                        <input type="text" id="adminName" required placeholder="Ví dụ: Hoàng Minh">
+                    </div>
+                    <div class="col" id="roleSelectorCol" style="display: none;">
+                        <label>Chức vụ</label>
+                        <select id="adminRole">
+                            <option value="staff">Nhân Viên</option>
+                            <option value="admin">Quản Trị Viên</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Email (Nhận Thông Báo)</label>
-                    <input type="email" id="adminEmail" required placeholder="admin@email.com">
+                <div class="form-group row" id="authFieldsRow">
+                    <div class="col">
+                        <label>Email Đăng Nhập</label>
+                        <input type="email" id="adminEmail" required placeholder="name@email.com">
+                    </div>
+                    <div class="col">
+                        <label>Mật Khẩu <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">(Ít nhất 6 ký tự)</span></label>
+                        <input type="text" id="adminPwd" placeholder="Để trống nếu không đổi">
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" id="cancelAdminBtn">Hủy</button>

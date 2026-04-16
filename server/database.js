@@ -91,10 +91,42 @@ async function initDatabase() {
         )
     `);
 
+    db.run(`
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    `);
+
     saveToFile();
+    initSettings();
     seedIfEmpty();
 
     return db;
+}
+
+// ======================================
+// CẤU HÌNH HỆ THỐNG
+// ======================================
+function getSetting(k) {
+    const row = queryOne('SELECT value FROM settings WHERE key = ?', [k]);
+    return row ? row.value : null;
+}
+
+function setSetting(k, v) {
+    execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, v]);
+}
+
+function generateInviteCode() {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setSetting('admin_invite_code', code);
+    return code;
+}
+
+function initSettings() {
+    if (!getSetting('admin_invite_code')) {
+        generateInviteCode();
+    }
 }
 
 // Lưu database ra file
@@ -412,15 +444,8 @@ function seedIfEmpty() {
 
     const count = queryOne('SELECT COUNT(*) as cnt FROM customers');
     if (count.cnt === 0) {
-        console.log('📦 Đang tạo dữ liệu mẫu...');
-        const a1 = addAdmin({ name: 'Hoàng Minh', email: 'hoangminh.admin@email.com' });
-        const a2 = addAdmin({ name: 'Lê Nga', email: 'lenga.support@email.com' });
-
-        addCustomer({ name: 'Nguyễn Văn Tuấn', phone: '0901234567', service: 'ChatGPT Plus', adminId: a1, email: 'tuan@email.com', password: 'chatgpt123', startDate: '2026-03-01', endDate: '2026-04-16', isEmailSent: false, isNotifGenerated: false });
-        addCustomer({ name: 'Trần Thị Bé', phone: '0987654321', service: 'Canva Pro', adminId: a2, email: 'be@email.com', password: 'canvapro', startDate: '2026-01-10', endDate: '2027-01-10', isEmailSent: false, isNotifGenerated: false });
-        addCustomer({ name: 'Lê Minh Khang', phone: '0912345678', service: 'Adobe Creative Cloud', adminId: a1, email: 'khang@email.com', password: 'adobe890', startDate: '2026-04-01', endDate: '2026-05-01', isEmailSent: false, isNotifGenerated: false });
-
-        console.log('✅ Dữ liệu mẫu đã tạo xong!');
+        console.log('ℹ️ Chưa có dữ liệu khách hàng. Hệ thống đã tắt tính năng tự động tạo dữ liệu mẫu.');
+        // Dữ liệu mẫu đã được vô hiệu hóa để chuẩn bị cho môi trường thật
     }
 }
 
@@ -433,6 +458,7 @@ module.exports = {
     getAllAdmins, addAdmin, updateAdmin, deleteAdmin,
     getAllServices, addService, updateService, deleteService,
     getAllNotifications, addNotification, updateNotification,
+    getSetting, setSetting, generateInviteCode,
     // Auth
     createUser, getUserByEmail, getUserById, getAllUsers,
     updateUserRole, updateUserProfile, deleteUser,

@@ -32,17 +32,8 @@
         <div class="auth-card glass-card" id="loginCard">
             <h2>Đăng Nhập</h2>
 
-            <!-- Login Type Tabs -->
-            <div class="login-tabs">
-                <button class="tab-btn active" id="tabAdmin" onclick="switchLoginTab('admin')">
-                    <i class="ph ph-shield-check"></i> Quản Trị Viên
-                </button>
-                <button class="tab-btn" id="tabUser" onclick="switchLoginTab('user')">
-                    <i class="ph ph-user"></i> Người Dùng
-                </button>
-            </div>
-
-            <p class="login-hint" id="loginHint">Đăng nhập với tài khoản Quản Trị Viên hoặc SuperAdmin</p>
+            <!-- Login Type Tabs (Removed since role is auto-detected) -->
+            <p class="login-hint" id="loginHint">Đăng nhập vào bảng điều khiển (Admin / Quản Trị Viên / Nhân Viên)</p>
 
             <form id="loginForm">
                 <div class="form-field">
@@ -68,8 +59,8 @@
 
         <!-- REGISTER FORM -->
         <div class="auth-card glass-card" id="registerCard" style="display: none;">
-            <h2>Đăng Ký Tài Khoản</h2>
-            <p class="login-hint">Tạo tài khoản Người Dùng mới</p>
+            <h2>Đăng Ký Quản Trị Viên</h2>
+            <p class="login-hint">Yêu cầu mã số bảo mật từ Admin</p>
 
             <form id="registerForm">
                 <div class="form-field">
@@ -89,11 +80,15 @@
                     <i class="ph ph-lock-key"></i>
                     <input type="password" id="regPwdConfirm" placeholder="Xác nhận mật khẩu" required minlength="6" autocomplete="new-password">
                 </div>
+                <div class="form-field">
+                    <i class="ph ph-shield-check"></i>
+                    <input type="text" id="regInviteCode" placeholder="Mã 6 chữ số (từ Admin)" required minlength="6" maxlength="6">
+                </div>
                 <div id="registerError" class="error-msg"></div>
                 <div id="registerSuccess" class="success-msg"></div>
                 <button type="submit" class="auth-btn" id="registerBtn">
-                    <span>Đăng Ký</span>
-                    <i class="ph ph-user-plus"></i>
+                    <span>Đăng Ký Quản Trị Viên</span>
+                    <i class="ph ph-shield-plus"></i>
                 </button>
             </form>
 

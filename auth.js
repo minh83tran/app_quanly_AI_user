@@ -21,18 +21,9 @@ let currentLoginAs = 'admin'; // 'admin' hoặc 'user'
 })();
 
 // ======================================
-// TAB SWITCHING
+// TAB SWITCHING (Removed)
 // ======================================
-window.switchLoginTab = function (tab) {
-    currentLoginAs = tab;
-    document.getElementById('tabAdmin').classList.toggle('active', tab === 'admin');
-    document.getElementById('tabUser').classList.toggle('active', tab === 'user');
-    document.getElementById('loginHint').textContent =
-        tab === 'admin'
-            ? 'Đăng nhập với tài khoản Quản Trị Viên hoặc SuperAdmin'
-            : 'Đăng nhập với tài khoản Người Dùng';
-    document.getElementById('loginError').textContent = '';
-}
+// Không còn dùng luồng riêng nữa vì Role phân biệt trong DB
 
 // ======================================
 // SHOW/HIDE FORMS
@@ -89,7 +80,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password, loginAs: currentLoginAs })
+            body: JSON.stringify({ email, password })
         });
         const data = await res.json();
 
@@ -133,8 +124,9 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     const email = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPwd').value;
     const confirmPwd = document.getElementById('regPwdConfirm').value;
+    const inviteCode = document.getElementById('regInviteCode').value.trim();
 
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || !password || !inviteCode) {
         errorEl.textContent = 'Vui lòng điền đầy đủ thông tin';
         return;
     }
@@ -154,14 +146,14 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         const res = await fetch(`${API_BASE}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, email, password })
+            body: JSON.stringify({ fullName, email, password, inviteCode })
         });
         const data = await res.json();
 
         if (!res.ok) {
             errorEl.innerHTML = `<i class="ph ph-warning-circle"></i> ${data.error}`;
             btn.disabled = false;
-            btn.innerHTML = '<span>Đăng Ký</span><i class="ph ph-user-plus"></i>';
+            btn.innerHTML = '<span>Đăng Ký Quản Trị Viên</span><i class="ph ph-shield-plus"></i>';
             return;
         }
 
